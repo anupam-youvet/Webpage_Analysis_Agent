@@ -3,6 +3,7 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const dotenv = require("dotenv");
 const morgan = require("morgan");
+const { marked } = require("marked");
 const { OpenAI } = require("openai");
 
 dotenv.config();
@@ -14,7 +15,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // --- SEO Analysis Agent ---
 app.post("/analysis/analyze-seo", async (req, res) => {
-  const { url } = req.body;
+  const { url, responseType = "json" } = req.body;
 
   if (!url) return res.status(400).json({ error: "URL is required" });
 
@@ -78,47 +79,65 @@ ${bodyText}`;
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
     });
-
-    res.json({ seo_analysis: completion.choices[0]?.message.content });
+    const response = completion.choices[0]?.message.content;
+    let body;
+    if (responseType === "json") {
+      body = { analysis: response };
+    } else {
+      res.setHeader("Content-Type", "text/html");
+      body = marked(response);
+    }
+    res.send(body);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to analyze SEO" });
+    res.status(500).json({ error: `Failed to analyze SEO: ${err}` });
   }
 });
 
 // --- Content Generation Agent ---
 app.post("/analysis/generate-content", async (req, res) => {
-  const { suggestions } = req.body;
+  const { suggestions, responseType = "json" } = req.body;
 
   if (!suggestions) {
     return res.status(400).json({ error: "suggestions are required" });
   }
   // for the topic: "${topic}"
   const prompt = `
-You are a technical content writer.
+You are a content strategist for a broadband/ISP company.
 
-Generate a full-length SEO-optimized article based on these suggestions: ${suggestions}
+Use the following SEO insights and keyword suggestions to create a new content piece that fills the identified gaps.
 
-Use a clean structure:
-- Title
-- Introduction
-- Main Sections with Subheadings
-- FAQs (if relevant)
-- Natural inclusion of keywords: Broadband, ISP, Smart WiFi, Fiber
+Requirements:
+- Create an SEO-optimized article (or FAQ page if recommended).
+- Include a compelling title and a clear introduction.
+- Organize into main sections and sub-sections using H2/H3 tags.
+- Include FAQs if suggested.
+- Naturally use these focus keywords: Broadband, ISP, Smart WiFi, Fiber.
+- Make it readable and useful for a general internet consumer.
 
-Make it readable, helpful, and informative.
-  `;
+Here are the SEO insights and content suggestions:
+
+${suggestions}
+
+`;
 
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
     });
-
-    res.json({ content: completion.choices[0].message.content });
+    const response = completion.choices[0].message.content;
+    let body;
+    if (responseType === "json") {
+      body = { content: response };
+    } else {
+      res.setHeader("Content-Type", "text/html");
+      body = marked(response);
+    }
+    res.send(body);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to generate content" });
+    res.status(500).json({ error: `Failed to generate content: ${err}` });
   }
 });
 
