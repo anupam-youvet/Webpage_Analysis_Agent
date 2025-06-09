@@ -14,20 +14,20 @@ app.use(cors());
 app.use(express.json());
 
 // Utility function to clean JSON response
-function cleanJsonResponse(responseText) {
+function cleanHtmlResponse(responseText) {
   let cleaned = responseText.trim();
 
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.substring(7);
+  if (cleaned.startsWith("```html")) {
+    cleaned = cleaned.replace("```html", "");
   } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.substring(3);
+    cleaned = cleaned.replaceAll("```", "");
   }
 
   if (cleaned.endsWith("```")) {
     cleaned = cleaned.substring(0, cleaned.length - 3);
   }
 
-  cleaned = cleaned.replace(/^\s*json\s*/i, "");
+  cleaned = cleaned.replace(/^\s*html\s*/i, "");
   return cleaned.trim();
 }
 
@@ -166,6 +166,8 @@ app.post("/api/generate-content", async (req, res) => {
       apiKey,
       maxTokens = 1500,
       temperature = 0.7,
+      selectedImprovements = [],
+      selectedKeywords = [],
     } = req.body;
 
     if (!seoData || !contentTopic || !generationType || !apiKey) {
@@ -178,11 +180,17 @@ app.post("/api/generate-content", async (req, res) => {
     const openai = new OpenAI({ apiKey });
 
     // Parse SEO data
-    const cleanedJson = cleanJsonResponse(seoData);
-    const seoParsed = JSON.parse(cleanedJson);
-
+    const seoParsed = JSON.parse(seoData);
     const suggestedKeywords =
-      seoParsed.SEOAnalysis.NewKeywordTargets.SuggestedKeywords;
+      selectedKeywords?.length > 0
+        ? selectedKeywords
+        : seoParsed.SEOAnalysis.NewKeywordTargets.SuggestedKeywords;
+
+    const suggestedImprovements =
+      selectedImprovements?.length > 0
+        ? selectedImprovements
+        : seoParsed.SEOAnalysis.Improvements;
+
     const contentTopics =
       seoParsed.SEOAnalysis.NewKeywordTargets.ContentTopicsToAdd;
 
@@ -195,21 +203,34 @@ app.post("/api/generate-content", async (req, res) => {
     }
 
     const prompt = `
-        You are an expert content writer and SEO strategist.
+You are an expert content writer and SEO strategist.
 
-        Write a comprehensive ${generationType} for the topic: "${contentTopic}".
+Write a comprehensive ${generationType} for the topic: "${contentTopic}".
 
-        Incorporate the following SEO keywords naturally: ${suggestedKeywords.join(
-          ", "
-        )}.
+Incorporate the following SEO keywords naturally: ${
+      suggestedKeywords.join(", ") || "none provided"
+    }.
 
-        Follow this outline:
-        ${outlineText}
+Follow this outline if applicable:
+${outlineText || "No outline provided."}
 
-        Ensure the content is clear, informative, and incorporates the suggested keywords where relevant.
+${
+  suggestedImprovements.length > 0
+    ? `Apply the following enhancements to improve the quality of the content: ${suggestedImprovements.join(
+        ", "
+      )}.`
+    : ""
+}
 
-        Structure your output appropriately for a ${generationType}.
-        `;
+Ensure the content is clear, engaging, informative, and appropriately structured for a ${generationType}.
+Use a tone and format that aligns with best SEO practices and user experience expectations.
+
+⚠️ Output the response as raw HTML only. Do **not** include any <html>, <head>, or <body> tags. Wrap the entire content inside a single <div> element.
+
+✅ Use Tailwind CSS utility classes for styling headings, paragraphs, lists, and other elements.
+
+Ensure the HTML structure is clean, semantic, and visually appealing using Tailwind conventions.
+`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -219,9 +240,9 @@ app.post("/api/generate-content", async (req, res) => {
     });
 
     const generatedContent = completion.choices[0].message.content;
-
+    const cleanResponse = cleanHtmlResponse(generatedContent);
     res.json({
-      content: generatedContent,
+      content: cleanResponse,
     });
   } catch (error) {
     console.error("Content generation error:", error.message);
