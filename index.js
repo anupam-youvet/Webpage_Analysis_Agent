@@ -31,6 +31,166 @@ function cleanHtmlResponse(responseText) {
   return cleaned.trim();
 }
 
+// Function to generate type-specific prompts
+const generatePrompt = (type, topic, keywords, improvements) => {
+  const keywordText = keywords.join(", ") || "none provided";
+  const improvementText =
+    improvements.length > 0
+      ? `Apply the following enhancements to improve the quality of the content: ${improvements.join(
+          ", "
+        )}.`
+      : "";
+
+  const baseInstructions = `
+⚠️ Output the response as raw HTML only. Do **not** include any <html>, <head>, or <body> tags. Wrap the entire content inside a single <div> element.
+✅ Use Tailwind CSS utility classes for styling headings, paragraphs, lists, and other elements.
+Ensure the HTML structure is clean, semantic, and visually appealing using Tailwind conventions.
+`;
+
+  switch (type) {
+    case "FAQ":
+      return `
+You are an expert content writer specializing in FAQ creation and customer support content.
+
+Create a comprehensive FAQ section for the topic: "${topic}".
+
+Requirements:
+- Generate 8-12 frequently asked questions with detailed, helpful answers
+- Each question should address common user concerns, problems, or inquiries
+- Arrange questions from most basic to more specific/advanced
+- Use a conversational, helpful tone that builds trust
+- Include practical examples, tips, or step-by-step guidance where appropriate
+- Structure each Q&A pair clearly with proper HTML semantics
+
+Incorporate these SEO keywords naturally: ${keywordText}
+
+${improvementText}
+
+Format Guidelines:
+- Use <h2> for the main "Frequently Asked Questions" heading
+- Use <h3> for each individual question
+- Use <p> tags for answers with proper paragraph breaks
+- Include <ul> or <ol> lists where helpful for step-by-step instructions
+- Add emphasis with <strong> or <em> tags where appropriate
+
+${baseInstructions}
+`;
+
+    case "Blog Post":
+      return `
+You are an expert blog writer and content strategist who creates engaging, informative blog posts.
+
+Write a comprehensive blog post about: "${topic}".
+
+Requirements:
+- Create an engaging, SEO-optimized blog post of 800-1200 words
+- Include a compelling introduction that hooks the reader
+- Organize content with clear headings and subheadings (H2, H3)
+- Use storytelling elements, examples, and practical insights
+- Include actionable tips, strategies, or takeaways
+- Add a strong conclusion that summarizes key points
+- Write in a conversational, engaging tone that keeps readers interested
+- Include relevant statistics, facts, or expert insights where appropriate
+
+Incorporate these SEO keywords naturally: ${keywordText}
+
+${improvementText}
+
+Structure Guidelines:
+- Use <h1> for the main title
+- Use <h2> for major sections
+- Use <h3> for subsections
+- Include <p> tags for paragraphs with proper spacing
+- Use <ul> or <ol> for lists and bullet points
+- Add <blockquote> for important quotes or statistics
+- Use <strong> and <em> for emphasis
+
+${baseInstructions}
+`;
+
+    case "Product Description":
+      return `
+You are an expert e-commerce copywriter specializing in product descriptions that convert visitors into customers.
+
+Create a compelling product description for: "${topic}".
+
+Requirements:
+- Write a persuasive product description that highlights key features and benefits
+- Focus on how the product solves customer problems or improves their life
+- Include specific product details, specifications, and unique selling points
+- Use persuasive language that creates urgency and desire
+- Address potential customer objections or concerns
+- Include social proof elements if applicable
+- Write in a sales-focused, benefit-driven tone
+- Keep description scannable with bullet points and short paragraphs
+
+Incorporate these SEO keywords naturally: ${keywordText}
+
+${improvementText}
+
+Format Guidelines:
+- Use <h2> for the product name/title
+- Use <h3> for sections like "Key Features", "Benefits", "Specifications"
+- Use <p> tags for descriptive paragraphs
+- Use <ul> for feature lists and bullet points
+- Use <strong> for highlighting important benefits or features
+- Include call-to-action language naturally within the content
+
+${baseInstructions}
+`;
+
+    case "Landing Page Content":
+      return `
+You are an expert conversion copywriter specializing in high-converting landing page content.
+
+Create compelling landing page content for: "${topic}".
+
+Requirements:
+- Write conversion-focused content that drives action
+- Include a powerful headline that captures attention immediately
+- Create a clear value proposition that explains benefits
+- Address visitor pain points and present solutions
+- Include social proof, testimonials, or credibility indicators
+- Build urgency and scarcity where appropriate
+- Include multiple compelling calls-to-action throughout
+- Use persuasive copywriting techniques and emotional triggers
+- Structure content to guide visitors toward conversion
+- Keep sections concise and scannable for quick reading
+
+Incorporate these SEO keywords naturally: ${keywordText}
+
+${improvementText}
+
+Structure Guidelines:
+- Use <h1> for the main headline
+- Use <h2> for major sections like "Benefits", "How It Works", "Why Choose Us"
+- Use <h3> for subsections and feature highlights
+- Use <p> tags for benefit statements and descriptions
+- Use <ul> for benefit lists and feature highlights
+- Include <div> with appropriate classes for call-to-action sections
+- Use <strong> and <em> for emphasis on key benefits
+
+${baseInstructions}
+`;
+
+    default:
+      return `
+You are an expert content writer and SEO strategist.
+
+Write comprehensive content for the topic: "${topic}".
+
+Incorporate the following SEO keywords naturally: ${keywordText}
+
+${improvementText}
+
+Ensure the content is clear, engaging, informative, and appropriately structured.
+Use a tone and format that aligns with best SEO practices and user experience expectations.
+
+${baseInstructions}
+`;
+  }
+};
+
 // Website scraping endpoint
 app.post("/api/scrape", async (req, res) => {
   try {
@@ -191,46 +351,13 @@ app.post("/api/generate-content", async (req, res) => {
         ? selectedImprovements
         : seoParsed.SEOAnalysis.Improvements;
 
-    const contentTopics =
-      seoParsed.SEOAnalysis.NewKeywordTargets.ContentTopicsToAdd;
-
-    let outlineText;
-    if (generationType === "FAQ") {
-      const outline = contentTopics.map((topic) => ({ Question: topic }));
-      outlineText = outline.map((item) => `- ${item.Question}`).join("\n");
-    } else {
-      outlineText = contentTopics.map((topic) => `- ${topic}`).join("\n");
-    }
-
-    const prompt = `
-You are an expert content writer and SEO strategist.
-
-Write a comprehensive ${generationType} for the topic: "${contentTopic}".
-
-Incorporate the following SEO keywords naturally: ${
-      suggestedKeywords.join(", ") || "none provided"
-    }.
-
-Follow this outline if applicable:
-${outlineText || "No outline provided."}
-
-${
-  suggestedImprovements.length > 0
-    ? `Apply the following enhancements to improve the quality of the content: ${suggestedImprovements.join(
-        ", "
-      )}.`
-    : ""
-}
-
-Ensure the content is clear, engaging, informative, and appropriately structured for a ${generationType}.
-Use a tone and format that aligns with best SEO practices and user experience expectations.
-
-⚠️ Output the response as raw HTML only. Do **not** include any <html>, <head>, or <body> tags. Wrap the entire content inside a single <div> element.
-
-✅ Use Tailwind CSS utility classes for styling headings, paragraphs, lists, and other elements.
-
-Ensure the HTML structure is clean, semantic, and visually appealing using Tailwind conventions.
-`;
+    // Generate the appropriate prompt based on generation type
+    const prompt = generatePrompt(
+      generationType,
+      contentTopic,
+      suggestedKeywords,
+      suggestedImprovements
+    );
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
